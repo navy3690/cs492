@@ -10,7 +10,7 @@ pub struct Cache<K, V> {
     // todo! Build your own cache type.
     // inner: Mutex<HashMap<K,V>>
     // inner : RwLock<HashMap<Arc<Mutex<K>>,V>>,
-    inner : RwLock<HashMap<K,Arc<Mutex<V>>>>,
+    inner : RwLock<HashMap<K,Arc<Mutex<Option<V>>>>>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
@@ -26,21 +26,83 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
     /// for the concurrent invocations of `get_or_insert_with(key, f)`, `f` is called only once.
     pub fn get_or_insert_with<F: FnOnce(K) -> V>(&self, key: K, f: F) -> V {
         // vale가 있다면 key return, 또는 excute 
+        // let map = self.inner.read().unwrap();
+        // let contain = map.get(&key);
+
+        // if let Some(v) = contain {
+        //     let r = &*v.lock().unwrap();
+        //     r.clone()
+        // }
+        // else{
+        //     drop(map);
+        //     let ff = f(key.clone());
+        //     let value = Arc::new(Mutex::new(ff.clone()));
+        //     let mut map = self.inner.write().unwrap();
+        //     map.insert(key.clone(),Arc::clone(&value));
+        //     drop(map);
+        //     ff
+        // }
         let map = self.inner.read().unwrap();
         let contain = map.get(&key);
 
         if let Some(v) = contain {
             let r = &*v.lock().unwrap();
-            r.clone()
+            match r {
+                Some(v) => v.clone(),
+                None => unreachable!()
+            }
         }
         else{
             drop(map);
-            let ff = f(key.clone());
-            let value = Arc::new(Mutex::new(ff.clone()));
             let mut map = self.inner.write().unwrap();
-            map.insert(key.clone(),Arc::clone(&value));
-            drop(map);
-            ff
+            let cont = map.get(&key);
+            if let Some(mtx) = cont{
+                let r_mutex = mtx.lock().unwrap();
+                let ff = match &*r_mutex {
+                    Some(v) => v.clone(),
+                    None => unreachable!()
+                };
+                ff
+            }
+            else{
+                let x : Option<V> = None;
+                let mtx = Arc::new(Mutex::new(x));
+                map.insert(key.clone(),mtx.clone()); 
+                let mut r_mutex = mtx.lock().unwrap();
+                drop(map);
+                let ff = f(key.clone());
+                let ff : Option<V> = Some(ff);
+                // let mut map = self.inner.write().unwrap();
+                if let None = &*r_mutex{
+                    // let x = *r_mutex;
+                    *r_mutex = ff.clone();
+                }
+                // map.insert(key.clone(),Arc::clone(&value));
+                // drop(map);
+                match ff {
+                    Some(v) => v.clone(),
+                    None => panic!()
+                }
+            }
+        
+            // drop(map);
+            // let map = self.inner.read().unwrap();
+            // let vv = map.get(&key);
+            // let v = match vv {
+            //     Some(v) => Arc::clone(&v),
+            //     None => unreachable!()
+            // };
+            // // drop(map);
+            // let ff = f(key.clone());
+            // let ff : Option<V> = Some(ff);
+            // let value = Arc::new(Mutex::new(ff.clone()));
+            // let mut map = self.inner.write().unwrap();
+            // map.insert(key.clone(),Arc::clone(&value));
+            // drop(map);
+            // match ff {
+            //     Some(v) => v.clone(),
+            //     None => unreachable!()
+            // }
         }
         // let map = self.inner.read().unwrap();
         // let contain = map.get(&key);
@@ -62,32 +124,6 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
         //     map.insert(kk.clone(),Arc::new(Mutex::new(value)));
         //     drop(map);
         //     ff
-        // }
-        
-        // let map = self.inner.read().unwrap();
-        // let k = Arc::new(Mutex::new(key));
-        // let contain = map.get(&k);
-
-        // if let Some(v) = contain {
-        //     let x = Arc::clone(&v);
-        //     let x = &*x.lock().unwrap();
-        //     x.clone()
-        // }
-        // else{
-        //     drop(map);
-        //     let ff = f(key.clone());
-        //     let value = Arc::new(Mutex::new(ff.clone()));
-        //     let mut map = self.inner.write().unwrap();
-        //     map.insert(key.clone(),Arc::clone(&value));
-        //     drop(map);
-        //     ff
-        // }
-
-        // let map = self.inner.read().unwrap();
-        // let k = Arc::new(key.clone());
-        // let is_contain = map.get(&k);
-        
-        // drop(&map);
     
         
         
