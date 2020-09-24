@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex, RwLock};
 #[derive(Debug, Default)]
 pub struct Cache<K, V> {
     // todo! Build your own cache type.
-    inner: ()
+    // inner: Mutex<HashMap<K,V>>
+    // inner : RwLock<HashMap<Arc<Mutex<K>>,V>>,
+    inner : RwLock<HashMap<K,Arc<Mutex<V>>>>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
@@ -23,7 +25,73 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
     /// duplicate the work. That is, `f` should be run only once for each key. Specifically, even
     /// for the concurrent invocations of `get_or_insert_with(key, f)`, `f` is called only once.
     pub fn get_or_insert_with<F: FnOnce(K) -> V>(&self, key: K, f: F) -> V {
-        todo!()
+        // vale가 있다면 key return, 또는 excute 
+        let map = self.inner.read().unwrap();
+        let contain = map.get(&key);
+
+        if let Some(v) = contain {
+            let r = &*v.lock().unwrap();
+            r.clone()
+        }
+        else{
+            drop(map);
+            let ff = f(key.clone());
+            let value = Arc::new(Mutex::new(ff.clone()));
+            let mut map = self.inner.write().unwrap();
+            map.insert(key.clone(),Arc::clone(&value));
+            drop(map);
+            ff
+        }
+        // let map = self.inner.read().unwrap();
+        // let contain = map.get(&key);
+
+        // if let Some(v) = contain {
+        //     let x = Arc::clone(&v);
+        //     let x = &*x.lock().unwrap();
+        //     x.clone()
+        // }
+        // else{
+        //     drop(map);
+        //     let kk = key.clone();
+        //     let k = Mutex::new(key);
+        //     // let kk = Arc::new(Mutex::new(key.clone()));
+        //     // let k = &*kk.lock().unwrap();
+        //     let ff = f(k.lock().unwrap().clone());
+        //     let value = ff.clone();
+        //     let mut map = self.inner.write().unwrap();
+        //     map.insert(kk.clone(),Arc::new(Mutex::new(value)));
+        //     drop(map);
+        //     ff
+        // }
+        
+        // let map = self.inner.read().unwrap();
+        // let k = Arc::new(Mutex::new(key));
+        // let contain = map.get(&k);
+
+        // if let Some(v) = contain {
+        //     let x = Arc::clone(&v);
+        //     let x = &*x.lock().unwrap();
+        //     x.clone()
+        // }
+        // else{
+        //     drop(map);
+        //     let ff = f(key.clone());
+        //     let value = Arc::new(Mutex::new(ff.clone()));
+        //     let mut map = self.inner.write().unwrap();
+        //     map.insert(key.clone(),Arc::clone(&value));
+        //     drop(map);
+        //     ff
+        // }
+
+        // let map = self.inner.read().unwrap();
+        // let k = Arc::new(key.clone());
+        // let is_contain = map.get(&k);
+        
+        // drop(&map);
+    
+        
+        
+        //RwLock은 많은 reader가 읽을 수 있음.
     }
 }
 
