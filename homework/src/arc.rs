@@ -87,14 +87,26 @@ impl<T> Arc<T> {
     /// ```
     #[inline]
     pub fn get_mut(this: &mut Self) -> Option<&mut T> {
-        todo!()
+        unsafe{
+            match this.is_unique() {
+                true => Some(&mut (*this.ptr.as_ptr()).data),
+                false => None
+            }
+        }
     }
-
     // Used in `get_mut` and `make_mut` to check if the given `Arc` is the unique reference to the
     // underlying data.
     #[inline]
     fn is_unique(&mut self) -> bool {
-        todo!()
+       unsafe {
+           let count = (*self.ptr.as_ptr()).count.load(Ordering::Acquire);
+            if count==1 {
+                true
+            }
+            else{
+                false
+            }
+        }
     }
 
     /// Returns a mutable reference into the given `Arc` without any check.
@@ -145,7 +157,10 @@ impl<T> Arc<T> {
     /// ```
     #[inline]
     pub fn count(this: &Self) -> usize {
-        todo!()
+        unsafe {
+            let count = (*(this.ptr.as_ptr())).count.load(Ordering::Acquire);
+            count
+        }
     }
 
     #[inline]
@@ -196,7 +211,18 @@ impl<T> Arc<T> {
     /// ```
     #[inline]
     pub fn try_unwrap(this: Self) -> Result<T, Self> {
-        todo!()
+        unsafe {
+            let count = (*(this.ptr.as_ptr())).count.load(Ordering::Acquire);
+            if count==1 {
+                let t = Box::from_raw(this.ptr.as_ptr());
+                let d = t.data;
+                mem::forget(this);
+                Ok(d)
+            }
+            else {
+                Err(this)
+            }
+        }   
     }
 }
 
@@ -228,7 +254,22 @@ impl<T: Clone> Arc<T> {
     /// ```
     #[inline]
     pub fn make_mut(this: &mut Self) -> &mut T {
-        todo!()
+
+        unsafe {
+            if this.is_unique() == true {
+                &mut (*this.ptr.as_ptr()).data
+            }
+            else{
+               let x = Box::new(ArcInner{
+                   count:AtomicUsize::new(1),
+                   data : (*this.ptr.as_ptr()).data.clone(),
+               });
+               (*this.ptr.as_ptr()).count.fetch_sub(1, Ordering::Relaxed);
+               this.ptr = Box::leak(x).into();
+               &mut (*this.ptr.as_ptr()).data
+            }
+        }
+       
     }
 }
 
@@ -253,7 +294,17 @@ impl<T> Clone for Arc<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Arc<T> {
-        todo!()
+
+        let v= self.inner().count.fetch_add(1,Ordering::Relaxed);
+        if v > MAX_REFCOUNT {
+            panic!()
+        }
+        Self::from_inner(self.ptr)
+        // todo!()
+        //store => acquire , acquire 이후의 일어난 일은 이전으로 못 가지만, 이전에 일어난 일은 이후로 갈 수 있음.
+        //Load => release, 이전에 일어난 일을 이후로 못 보냄, 이후로 일어난 일은 이전으로 보낼 수 있음.
+        // acquire하고 release를 하면 그 사이에 있는 건 항상 그 사이에 있게 됨. => ordering 안되고 가둬짐
+        // todo!()
     }
 }
 
@@ -292,7 +343,16 @@ impl<T> Drop for Arc<T> {
     /// drop(foo2);   // Prints "dropped!"
     /// ```
     fn drop(&mut self) {
-        todo!()
+        unsafe {
+            let v = (*self.ptr.as_ptr()).count.fetch_sub(1,Ordering::Relaxed);
+            if v != 1 {
+                return;
+            }
+            else {
+                let v = Box::from_raw(self.ptr.as_ptr());
+                drop(v)
+            }
+        }
     }
 }
 

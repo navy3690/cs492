@@ -330,4 +330,5 @@ fn test_insert_next() {
     assert_eq!(it.next(), None);
 
     assert_eq!(list.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3, 4, 5]);
+    // assert_eq!(list.into_iter().collect::<Vec<_>>(), [0, 1, 4, 5]);
 }
