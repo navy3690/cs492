@@ -269,6 +269,7 @@ impl<T: Clone> Arc<T> {
                    data : (*this.ptr.as_ptr()).data.clone(),
                });
                (*this.ptr.as_ptr()).count.fetch_sub(1, Ordering::Relaxed);
+            
                this.ptr = Box::leak(x).into();
                &mut (*this.ptr.as_ptr()).data
             }
@@ -298,12 +299,14 @@ impl<T> Clone for Arc<T> {
     /// ```
     #[inline]
     fn clone(&self) -> Arc<T> {
-
-        let v= self.inner().count.fetch_add(1,Ordering::Relaxed);
+        fence(Ordering::Acquire);
+        let v= self.inner().count.fetch_add(1,Ordering::Release);
+        
         if v > MAX_REFCOUNT {
             panic!()
         }
         Self::from_inner(self.ptr)
+        
         // todo!()
         //store => acquire , acquire 이후의 일어난 일은 이전으로 못 가지만, 이전에 일어난 일은 이후로 갈 수 있음.
         //Load => release, 이전에 일어난 일을 이후로 못 보냄, 이후로 일어난 일은 이전으로 보낼 수 있음.
@@ -348,7 +351,8 @@ impl<T> Drop for Arc<T> {
     /// ```
     fn drop(&mut self) {
         unsafe {
-            let v = (*self.ptr.as_ptr()).count.fetch_sub(1,Ordering::Relaxed);
+            fence(Ordering::Acquire);
+            let v = (*self.ptr.as_ptr()).count.fetch_sub(1,Ordering::Release);
             if v != 1 {
                 return;
             }
