@@ -8,9 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 #[derive(Debug, Default)]
 pub struct Cache<K, V> {
     // todo! Build your own cache type.
-    // inner: Mutex<HashMap<K,V>>
-    // inner : RwLock<HashMap<Arc<Mutex<K>>,V>>,
-    inner : RwLock<HashMap<K,Arc<Mutex<Option<V>>>>>,
+    inner: RwLock<HashMap<K, Arc<Mutex<Option<V>>>>>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
@@ -25,7 +23,7 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
     /// duplicate the work. That is, `f` should be run only once for each key. Specifically, even
     /// for the concurrent invocations of `get_or_insert_with(key, f)`, `f` is called only once.
     pub fn get_or_insert_with<F: FnOnce(K) -> V>(&self, key: K, f: F) -> V {
-        // vale가 있다면 key return, 또는 excute 
+        // vale가 있다면 key return, 또는 excute
         // let map = self.inner.read().unwrap();
         // let contain = map.get(&key);
 
@@ -49,31 +47,29 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
             let r = &*v.lock().unwrap();
             match r {
                 Some(v) => v.clone(),
-                None => unreachable!()
+                None => unreachable!(),
             }
-        }
-        else{
+        } else {
             drop(map);
             let mut map = self.inner.write().unwrap();
             let cont = map.get(&key);
-            if let Some(mtx) = cont{
+            if let Some(mtx) = cont {
                 let r_mutex = mtx.lock().unwrap();
                 let ff = match &*r_mutex {
                     Some(v) => v.clone(),
-                    None => unreachable!()
+                    None => unreachable!(),
                 };
                 ff
-            }
-            else{
-                let x : Option<V> = None;
+            } else {
+                let x: Option<V> = None;
                 let mtx = Arc::new(Mutex::new(x));
-                map.insert(key.clone(),mtx.clone()); 
+                map.insert(key.clone(), mtx.clone());
                 let mut r_mutex = mtx.lock().unwrap();
                 drop(map);
                 let ff = f(key.clone());
-                let ff : Option<V> = Some(ff);
+                let ff: Option<V> = Some(ff);
                 // let mut map = self.inner.write().unwrap();
-                if let None = &*r_mutex{
+                if let None = &*r_mutex {
                     // let x = *r_mutex;
                     *r_mutex = ff.clone();
                 }
@@ -81,10 +77,10 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
                 // drop(map);
                 match ff {
                     Some(v) => v.clone(),
-                    None => panic!()
+                    None => panic!(),
                 }
             }
-        
+
             // drop(map);
             // let map = self.inner.read().unwrap();
             // let vv = map.get(&key);
@@ -124,9 +120,7 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
         //     map.insert(kk.clone(),Arc::new(Mutex::new(value)));
         //     drop(map);
         //     ff
-    
-        
-        
+
         //RwLock은 많은 reader가 읽을 수 있음.
     }
 }

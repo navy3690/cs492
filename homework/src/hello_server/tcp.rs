@@ -33,7 +33,7 @@ impl CancellableTcpListener {
             is_canceled: AtomicBool::new(false), //initialize with the false
         })
     }
- 
+
     /// Signals the listener to stop accepting new connections.
     pub fn cancel(&self) -> io::Result<()> {
         self.is_canceled.store(true, Ordering::Release);
@@ -58,9 +58,8 @@ impl<'a> Iterator for Incoming<'a> {
         let stream: io::Result<TcpStream> = self.listener.inner.accept().map(|p| p.0);
         let is_canceled = self.listener.is_canceled.load(Ordering::Acquire);
         if is_canceled == true {
-           None
-        }
-        else{
+            None
+        } else {
             Some(stream)
         }
         // todo!()

@@ -20,7 +20,7 @@ impl Drop for Worker {
     /// When dropped, the thread's `JoinHandle` must be `join`ed.  If the worker panics, then this
     /// function should panic too.  NOTE: that the thread is detached if not `join`ed explicitly.
     fn drop(&mut self) {
-        if let Some(thread) = self.thread.take(){
+        if let Some(thread) = self.thread.take() {
             thread.join().unwrap();
         }
     }
@@ -37,13 +37,13 @@ struct ThreadPoolInner {
 impl ThreadPoolInner {
     /// Increment the job count.
     fn start_job(&self) {
-        *self.job_count.lock().unwrap()+=1;
+        *self.job_count.lock().unwrap() += 1;
     }
 
     /// Decrement the job count.
     fn finish_job(&self) {
-        let mut v=self.job_count.lock().unwrap();
-        *v-=1;
+        let mut v = self.job_count.lock().unwrap();
+        *v -= 1;
         if *v == 0 {
             self.empty_condvar.notify_one();
         }
@@ -55,8 +55,8 @@ impl ThreadPoolInner {
     /// not care about that in this homework.
     fn wait_empty(&self) {
         let mut v = self.job_count.lock().unwrap();
-        
-        while *v!=0 {
+
+        while *v != 0 {
             v = self.empty_condvar.wait(v).unwrap();
         }
     }
@@ -76,37 +76,44 @@ impl ThreadPool {
         assert!(size > 0);
         // 스레드들을 생성하고 백터 내에 보관
         let (sender, receiver) = unbounded();
-        
 
         let mut workers = Vec::with_capacity(size);
 
-        let thread_pool_inner = ThreadPoolInner{job_count: Mutex::new(0),
-            empty_condvar: Condvar::new()};
+        let thread_pool_inner = ThreadPoolInner {
+            job_count: Mutex::new(0),
+            empty_condvar: Condvar::new(),
+        };
         let pool_inner = Arc::new(thread_pool_inner);
         let pool = Arc::clone(&pool_inner);
 
-        for id in 0..size{
+        for id in 0..size {
             let r = receiver.clone();
             let p = Arc::clone(&pool);
-            let thread = thread::spawn(move || loop{
+            let thread = thread::spawn(move || loop {
                 let job = r.recv();
                 match job {
-                    Ok(Job(job))=>{
+                    Ok(Job(job)) => {
                         job();
-                    },
-                    Err(_)=> break
+                    }
+                    Err(_) => break,
                 }
                 p.finish_job();
             });
 
-            workers.push(Worker{ id, thread: Some(thread)});
+            workers.push(Worker {
+                id,
+                thread: Some(thread),
+            });
 
             // workers.push(Worker::new(id, &receiver.clone()));
         }
         let job_sender = Some(sender);
-        
 
-        ThreadPool { workers, job_sender, pool_inner}  
+        ThreadPool {
+            workers,
+            job_sender,
+            pool_inner,
+        }
     }
 
     /// Execute a new job in the thread pool.
@@ -122,7 +129,6 @@ impl ThreadPool {
         if let Some(sender) = x {
             sender.send(job).unwrap();
         }
-
     }
 
     /// Block the current thread until all jobs in the pool have been executed.  NOTE: This method
@@ -136,12 +142,10 @@ impl Drop for ThreadPool {
     /// When dropped, all worker threads' `JoinHandle` must be `join`ed. If the thread panicked,
     /// then this function should panic too.
     fn drop(&mut self) {
-
         for _ in &self.workers {
             drop(self.job_sender.take());
             //take() none 넣어주고, content 가져오기 => 소유권 가져오기
         }
-
     }
 }
 
