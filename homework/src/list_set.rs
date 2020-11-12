@@ -37,7 +37,29 @@ impl<'l, T: Ord> Cursor<'l, T> {
     /// Move the cursor to the position of key in the sorted list. If the key is found in the list,
     /// return `true`.
     fn find(&mut self, key: &T) -> bool {
-        todo!()
+        unsafe{
+            loop {
+                let node = *self.0;
+                if node.is_null() {
+                    break;
+                } 
+                let data = &(*node).data;
+                
+                if *key < *data{
+                    break;
+                }
+                else if *key == *data{
+                    return true;
+                }
+                else{
+                    let next = (*(*self.0)).next.lock().unwrap();
+                    self.0 = next;
+                    continue;
+                }
+                
+            }
+            return false;
+        }
     }
 }
 
@@ -52,22 +74,50 @@ impl<T> OrderedListSet<T> {
 
 impl<T: Ord> OrderedListSet<T> {
     fn find(&self, key: &T) -> (bool, Cursor<T>) {
-        todo!()
+        let head = self.head.lock().unwrap();
+        let mut cursor = Cursor(head);
+        let success = cursor.find(key);
+        (success, cursor)
     }
 
     /// Returns `true` if the set contains the key.
     pub fn contains(&self, key: &T) -> bool {
-        todo!()
+        let head = self.head.lock().unwrap();
+        let mut cursor = Cursor(head);
+        cursor.find(key)
     }
 
     /// Insert a key to the set. If the set already has the key, return the provided key in `Err`.
     pub fn insert(&self, key: T) -> Result<(), T> {
-        todo!()
+        let head = self.head.lock().unwrap();
+        let mut cursor = Cursor(head);
+        if cursor.find(&key) {
+            Err(key)
+        }
+        else{
+            let next = *cursor.0;
+            let new = Node::new(key,next);
+            *cursor.0 = new;
+            Ok(())
+        }
     }
 
     /// Remove the key from the set and return it.
     pub fn remove(&self, key: &T) -> Result<T, ()> {
-        todo!()
+        unsafe {
+            let head = self.head.lock().unwrap();
+            let mut cursor = Cursor(head);
+            if cursor.find(key) {
+                let remove = Box::from_raw(*cursor.0);
+                let data = remove.data;
+                let next = (*remove).next.lock().unwrap();
+                *cursor.0 = *next;
+                Ok(data)
+            }
+            else{
+                Err(())
+            }
+        }  
     }
 }
 
@@ -85,13 +135,51 @@ impl<'l, T> Iterator for Iter<'l, T> {
     type Item = &'l T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        unsafe {
+            match &self.0{
+                None => {
+                    None
+                },
+                Some(m) => {
+                    let node = **m;
+                    if node.is_null() {
+                        self.0 = None;
+                        None
+                    }
+                    else{
+                        let data = &(*node).data;
+                        let next = (*node).next.lock().unwrap();
+                        self.0 = Some(next);
+                        Some(data)
+                    }
+                }
+            }
+        }
     }
 }
 
 impl<T> Drop for OrderedListSet<T> {
     fn drop(&mut self) {
-        todo!()
+        unsafe {
+            let mut head = *self.head.get_mut().unwrap();
+            if head.is_null(){
+                return;
+            }
+            loop{
+                let next = Box::from_raw(head);
+                let next = (*next).next;
+                let x = next.into_inner();
+                match x {
+                    Ok(n) => {
+                        if n.is_null() {
+                            break;
+                        }
+                        head = n;
+                    }
+                    _ => break
+                }
+            }
+        }
     }
 }
 
