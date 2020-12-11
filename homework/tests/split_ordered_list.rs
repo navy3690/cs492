@@ -24,6 +24,8 @@ pub fn smoke() {
     assert_eq!(list.delete(&37, &guard), Err(()));
     assert_eq!(list.lookup(&42, &guard), Some(&42));
     assert_eq!(list.lookup(&37, &guard), None);
+    // assert_eq!(list.insert(&306244791841062916, 1, &guard), Ok(()));
+    // assert_eq!(list.lookup(&306244791841062916, &guard), Some(&1));
 }
 
 #[test]

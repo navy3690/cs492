@@ -5,7 +5,9 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicUsize, Ordering};
+use std::ptr::null;
 use crossbeam_epoch::{unprotected, Atomic, Guard, Owned, Pointer, Shared};
+use mem::size_of;
 
 /// Growable array of `Atomic<T>`.
 ///
@@ -173,7 +175,34 @@ impl Debug for Segment {
 impl<T> Drop for GrowableArray<T> {
     /// Deallocate segments, but not the individual elements.
     fn drop(&mut self) {
-        todo!()
+        
+        unsafe{
+            let seg = self.root.load(Ordering::Acquire,unprotected());
+            if seg.is_null()==false{
+                drop_seg(seg,seg.tag());
+            }
+        }
+        
+        fn drop_seg(seg: Shared<Segment>, height: usize){
+            let mut index = 0usize;
+            loop {
+                unsafe{ 
+                    let index_ptr = &*(seg.deref()).get_unchecked(index); 
+                    let next_seg: Shared<Segment> = Shared::from_usize(index_ptr.load(Ordering::Acquire)); 
+                    if next_seg.is_null()==false {
+                        if height>1 {
+                            drop_seg(next_seg,height-1)
+                        } 
+                    }
+                }
+                if index==1023  {break;}
+                else { index+=1; }
+            }
+            unsafe{
+                seg.into_owned();
+            }
+        }
+
     }
 }
 
@@ -195,6 +224,71 @@ impl<T> GrowableArray<T> {
     /// Returns the reference to the `Atomic` pointer at `index`. Allocates new segments if
     /// necessary.
     pub fn get(&self, mut index: usize, guard: &Guard) -> &Atomic<T> {
-        todo!()
+        
+        let bit_num = 64-index.leading_zeros();
+        let new_ptr = Owned::new(Segment::new());
+        let r = self.root.compare_and_set(Shared::null(), new_ptr.with_tag(1), Ordering::AcqRel, guard);
+
+        let mut root = match r {
+            Err(e) => e.current,
+            Ok(t) => t
+        };
+
+        let mut height = root.tag();
+        let bit_height;
+        if (bit_num%10)==0 {
+            bit_height = (bit_num/10) as usize;
+        }
+        else {
+            bit_height = ((bit_num/10)+1) as usize;
+        }
+        
+        loop {
+            if height<bit_height{
+                let next = Owned::new(Segment::new()); 
+                unsafe {
+                    let index_zero = &*next.get_unchecked(usize::MIN);
+                    index_zero.store(root.into_usize(), Ordering::Release);
+                    let result = self.root.compare_and_set(root, next.with_tag(height+1), Ordering::AcqRel, guard);
+                    match result {
+                        Err(e) => root = e.current,
+                        Ok(t) => root = t
+                    }
+                }
+                height = root.tag();
+            }
+            else { break; }
+        }
+    
+        let mut curr_seg = root;
+        let mut currIndex = index;
+        let mut root_height = root.tag();
+        loop{
+            let two:usize = 2;
+            let max_bit = two.pow(10 * root_height as u32) - 1;
+            let mut new_index = currIndex & max_bit;
+            new_index = new_index >> (10 * (root_height -1));
+            if(root_height>1){
+                unsafe{
+                    let seg_index = (curr_seg.deref()).get_unchecked(new_index);
+                    let val = Shared::into_usize(Owned::new(Segment::new()).into_shared(guard));
+                    let usize_zero = seg_index.compare_and_swap(0, val, Ordering::AcqRel);
+                    match usize_zero {
+                        0 => curr_seg = Shared::from_usize(val),
+                        _ =>{
+                            let x:Owned<Segment> = Shared::from_usize(val).into_owned();
+                            curr_seg = Shared::from_usize(usize_zero)
+                        }   
+                    }
+                }
+                root_height-=1;
+            }
+            else{
+                unsafe{ 
+                    let seg = curr_seg.deref();
+                    return &*(seg.get_unchecked(new_index) as *const _ as *const Atomic<T>)
+                }
+            }
+        }
     }
 }
